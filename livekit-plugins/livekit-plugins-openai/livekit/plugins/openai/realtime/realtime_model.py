@@ -57,7 +57,7 @@ from openai.types.beta.realtime import (
     session_update_event,
 )
 from openai.types.beta.realtime.response_create_event import Response
-from openai.types.beta.realtime.session import InputAudioTranscription, TurnDetection
+from openai.types.beta.realtime.session import InputAudioNoiseReduction, InputAudioTranscription, TurnDetection
 
 from ..log import logger
 
@@ -89,6 +89,7 @@ class _RealtimeOptions:
     temperature: float
     tool_choice: llm.ToolChoice | None
     input_audio_transcription: InputAudioTranscription | None
+    input_audio_noise_reduction: InputAudioNoiseReduction | None
     turn_detection: TurnDetection | None
     api_key: str
     base_url: str
@@ -174,6 +175,7 @@ class RealtimeModel(llm.RealtimeModel):
         model: str = "gpt-4o-realtime-preview",
         voice: str = "alloy",
         input_audio_transcription: NotGivenOr[InputAudioTranscription | None] = NOT_GIVEN,
+        input_audio_noise_reduction: NotGivenOr[InputAudioNoiseReduction | None] = NOT_GIVEN,
         turn_detection: NotGivenOr[TurnDetection | None] = NOT_GIVEN,
         temperature: NotGivenOr[float] = NOT_GIVEN,
         tool_choice: NotGivenOr[llm.ToolChoice | None] = NOT_GIVEN,
@@ -193,6 +195,7 @@ class RealtimeModel(llm.RealtimeModel):
         base_url: str | None = None,
         voice: str = "alloy",
         input_audio_transcription: NotGivenOr[InputAudioTranscription | None] = NOT_GIVEN,
+        input_audio_noise_reduction: NotGivenOr[InputAudioNoiseReduction | None] = NOT_GIVEN,
         turn_detection: NotGivenOr[TurnDetection | None] = NOT_GIVEN,
         temperature: NotGivenOr[float] = NOT_GIVEN,
         tool_choice: NotGivenOr[llm.ToolChoice | None] = NOT_GIVEN,
@@ -208,6 +211,7 @@ class RealtimeModel(llm.RealtimeModel):
         tool_choice: NotGivenOr[llm.ToolChoice | None] = NOT_GIVEN,
         base_url: NotGivenOr[str] = NOT_GIVEN,
         input_audio_transcription: NotGivenOr[InputAudioTranscription | None] = NOT_GIVEN,
+        input_audio_noise_reduction: NotGivenOr[InputAudioNoiseReduction | None] = NOT_GIVEN,
         turn_detection: NotGivenOr[TurnDetection | None] = NOT_GIVEN,
         api_key: str | None = None,
         http_session: aiohttp.ClientSession | None = None,
@@ -280,6 +284,7 @@ class RealtimeModel(llm.RealtimeModel):
         base_url: str | None = None,
         voice: str = "alloy",
         input_audio_transcription: NotGivenOr[InputAudioTranscription | None] = NOT_GIVEN,
+        input_audio_noise_reduction: NotGivenOr[InputAudioNoiseReduction | None] = NOT_GIVEN,
         turn_detection: NotGivenOr[TurnDetection | None] = NOT_GIVEN,
         temperature: float = 0.8,
         http_session: aiohttp.ClientSession | None = None,
@@ -342,6 +347,7 @@ class RealtimeModel(llm.RealtimeModel):
         return cls(
             voice=voice,
             input_audio_transcription=input_audio_transcription,
+            input_audio_noise_reduction=input_audio_noise_reduction,
             turn_detection=turn_detection,
             temperature=temperature,
             api_key=api_key,
@@ -359,6 +365,7 @@ class RealtimeModel(llm.RealtimeModel):
         temperature: NotGivenOr[float] = NOT_GIVEN,
         turn_detection: NotGivenOr[TurnDetection | None] = NOT_GIVEN,
         tool_choice: NotGivenOr[llm.ToolChoice | None] = NOT_GIVEN,
+        input_audio_noise_reduction: NotGivenOr[InputAudioNoiseReduction | None] = NOT_GIVEN,
     ) -> None:
         if is_given(voice):
             self._opts.voice = voice
@@ -371,6 +378,9 @@ class RealtimeModel(llm.RealtimeModel):
 
         if is_given(tool_choice):
             self._opts.tool_choice = tool_choice
+            
+        if is_given(input_audio_noise_reduction):
+            self._opts.input_audio_noise_reduction = input_audio_noise_reduction
 
         for sess in self._sessions:
             sess.update_options(
@@ -378,6 +388,7 @@ class RealtimeModel(llm.RealtimeModel):
                 temperature=temperature,
                 turn_detection=turn_detection,
                 tool_choice=tool_choice,
+                input_audio_noise_reduction=input_audio_noise_reduction,
             )
 
     def _ensure_http_session(self) -> aiohttp.ClientSession:
@@ -656,6 +667,19 @@ class RealtimeSession(
             else None
         )
 
+        input_audio_noise_reduction = self._realtime_model._opts.input_audio_noise_reduction
+        input_audio_noise_reduction = (
+            session_update_event.SessionInputAudioNoiseReduction.model_validate(
+                input_audio_noise_reduction.model_dump(
+                    by_alias=True,
+                    exclude_unset=True,
+                    exclude_defaults=True,
+                )
+            )
+            if input_audio_noise_reduction
+            else None
+        )
+
         turn_detection = self._realtime_model._opts.turn_detection
         turn_detection = (
             session_update_event.SessionTurnDetection.model_validate(
@@ -683,6 +707,7 @@ class RealtimeSession(
                     modalities=["text", "audio"],
                     turn_detection=turn_detection,
                     input_audio_transcription=input_audio_transcription,
+                    input_audio_noise_reduction=input_audio_noise_reduction,
                     temperature=self._realtime_model._opts.temperature,
                 ),
                 event_id=utils.shortuuid("session_update_"),
@@ -704,6 +729,7 @@ class RealtimeSession(
         voice: NotGivenOr[str] = NOT_GIVEN,
         temperature: NotGivenOr[float] = NOT_GIVEN,
         turn_detection: NotGivenOr[TurnDetection | None] = NOT_GIVEN,
+        input_audio_noise_reduction: NotGivenOr[InputAudioNoiseReduction | None] = NOT_GIVEN,
     ) -> None:
         kwargs = {}
 
@@ -724,6 +750,9 @@ class RealtimeSession(
 
         if is_given(turn_detection):
             kwargs["turn_detection"] = turn_detection
+            
+        if is_given(input_audio_noise_reduction):
+            kwargs["input_audio_noise_reduction"] = input_audio_noise_reduction
 
         if kwargs:
             self.send_event(
